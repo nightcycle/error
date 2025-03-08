@@ -6,7 +6,7 @@ local Option = require("@wally/Option")
 -- Types
 type Option<V> = Option.Option<V>
 type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue }
-type TraceInfo = {
+export type TraceInfo = {
 	Source: string,
 	LineNumber: number,
 	Function: {
@@ -299,6 +299,6 @@ return {
 		)
 	end,
 	trace = function(offset: number?): { TraceInfo }
-		return dumpTrace(offset or 3)
+		return dumpTrace(3 + (offset or 0))
 	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }),
 }
