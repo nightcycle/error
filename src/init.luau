@@ -40,6 +40,7 @@ type ErrorBuilderImpl<T, D> = {
 	description: (self: ErrorBuilder<T, D>, desc: string) -> ErrorBuilder<T, D>,
 	body: (self: ErrorBuilder<T, D>, body: D) -> ErrorBuilder<T, D>,
 	trace: (self: ErrorBuilder<T, D>, trace: { TraceInfo }) -> ErrorBuilder<T, D>,
+	extendTrace: (self: ErrorBuilder<T, D>, trace: { TraceInfo }) -> ErrorBuilder<T, D>,
 	build: (self: ErrorBuilder<T, D>) -> Error<T, D>,
 }
 export type ErrorBuilder<T, D> = typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorBuilderImpl<T, D>))
@@ -280,7 +281,28 @@ function ErrorBuilder:body(body: unknown)
 	return newErrorBuilder(self._Type, self._Title, self._Description, Option.some(body), self._Trace)
 end
 
+function ErrorBuilder:extendTrace(trace: { TraceInfo })
+	return newErrorBuilder(
+		self._Type,
+		self._Title,
+		self._Description,
+		self._Body,
+		self._Trace:map(function(t)
+			local out = table.clone(t)
+			for i, v in ipairs(trace) do
+				table.insert(out, v)
+			end
+			table.freeze(out)
+			return out
+		end)
+	)
+end
+
 function ErrorBuilder:trace(trace: { TraceInfo })
+	if not table.isfrozen(trace) then
+		trace = table.clone(trace)
+		table.freeze(trace)
+	end
 	return newErrorBuilder(self._Type, self._Title, self._Description, self._Body, Option.some(trace))
 end
 
