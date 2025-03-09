@@ -306,6 +306,12 @@ return {
 			Option.some(dumpTrace(3, DEFAULT_MAX_TRACE))
 		)
 	end,
+	isErr = function(value: unknown?): boolean
+		if typeof(value) == "table" then
+			return getmetatable(value :: any) == ErrorImpl
+		end
+		return false
+	end,
 	trace = function(offset: number?, maxTrace: number): { TraceInfo }
 		return dumpTrace(3 + (offset or 0), maxTrace or DEFAULT_MAX_TRACE)
 	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }) & ((offset: number, maxTrace: number) -> { TraceInfo }),
