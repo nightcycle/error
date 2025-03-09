@@ -5,7 +5,7 @@ local Option = require("@wally/Option")
 -- Modules
 -- Types
 type Option<V> = Option.Option<V>
-type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue }
+export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue }
 export type TraceInfo = {
 	Source: string,
 	LineNumber: number,
