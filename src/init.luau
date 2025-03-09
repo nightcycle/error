@@ -46,6 +46,7 @@ export type ErrorBuilder<T, D> = typeof(setmetatable({} :: ErrorStruct<T, D>, {}
 
 -- Constants
 local INFO_OPTIONS = "slnaf"
+local DEFAULT_MAX_TRACE = 16
 -- Variables
 -- References
 -- Private Functions
@@ -69,13 +70,16 @@ function getTraceInfo(level: number): Option<TraceInfo>
 	table.freeze(out)
 	return Option.some(out)
 end
-function dumpTrace(offset: number): { TraceInfo }
+function dumpTrace(offset: number, maxTrace: number): { TraceInfo }
 	local index = 1 + offset
 	local out = {}
 	local trace = getTraceInfo(index)
 	while trace:isSome() do
 		out[index - offset] = trace:unwrap()
 		index += 1
+		if index > maxTrace then
+			break
+		end
 		trace = getTraceInfo(index)
 	end
 	return out
@@ -100,7 +104,7 @@ end
 local ErrorImpl = {} :: ErrorImpl<unknown, unknown>
 ErrorImpl.__index = ErrorImpl
 
-function asJson(value: JSONValue | unknown, log: { [any]: true? }?): string
+function toJson(value: JSONValue | unknown, log: { [any]: true? }?): string
 	log = log or {}
 	assert(log, `bad log`)
 	if type(value) == "string" then
@@ -135,7 +139,7 @@ function asJson(value: JSONValue | unknown, log: { [any]: true? }?): string
 		end
 		if #(value :: any) == keyCount and isArray then
 			for _, v in ipairs(value :: any) do
-				table.insert(out, asJson(v, log))
+				table.insert(out, toJson(v, log))
 			end
 			return "[" .. table.concat(out, ",") .. "]"
 		else
@@ -143,13 +147,13 @@ function asJson(value: JSONValue | unknown, log: { [any]: true? }?): string
 				if typeof(v) == "table" and v["unwrap"] and (v["_state"] == "S" or v["_state"] == "N") then
 					local vOpt: Option<unknown> = v
 					if vOpt:isSome() then
-						table.insert(out, asJson(tostring(k), log) .. ": " .. asJson(vOpt:unwrap(), log))
+						table.insert(out, toJson(tostring(k), log) .. ": " .. toJson(vOpt:unwrap(), log))
 					else
-						table.insert(out, asJson(tostring(k), log) .. ": null")
+						table.insert(out, toJson(tostring(k), log) .. ": null")
 					end
 					continue
 				end
-				table.insert(out, asJson(tostring(k), log) .. ":" .. asJson(v, log))
+				table.insert(out, toJson(tostring(k), log) .. ":" .. toJson(v, log))
 			end
 			return "{" .. table.concat(out, ",") .. "}"
 		end
@@ -168,7 +172,7 @@ end
 
 function ErrorImpl:display(fmt: ErrorDisplayFormat): string
 	if fmt == "JSON" then
-		return asJson(self)
+		return toJson(self)
 	end
 
 	if fmt == "Log" then
@@ -201,7 +205,7 @@ function ErrorImpl:display(fmt: ErrorDisplayFormat): string
 
 	if fmt == "Body" or fmt == "Full" then
 		bodyStr = self._Body:match(function(body)
-			return Option.some(asJson(body))
+			return Option.some(toJson(body))
 		end, function()
 			return Option.none()
 		end)
@@ -299,10 +303,11 @@ return {
 			Option.none(),
 			Option.none(),
 			Option.none(),
-			Option.some(dumpTrace(3))
+			Option.some(dumpTrace(3, DEFAULT_MAX_TRACE))
 		)
 	end,
-	trace = function(offset: number?): { TraceInfo }
-		return dumpTrace(3 + (offset or 0))
-	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }),
+	trace = function(offset: number?, maxTrace: number): { TraceInfo }
+		return dumpTrace(3 + (offset or 0), maxTrace or DEFAULT_MAX_TRACE)
+	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }) & ((offset: number, maxTrace: number) -> { TraceInfo }),
+	displayAsJson = toJson,
 }
