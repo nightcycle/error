@@ -84,6 +84,7 @@ function dumpTrace(offset: number, maxTrace: number): { TraceInfo }
 	end
 	return out
 end
+
 function newErrorStruct<T, D>(
 	errorType: T,
 	title: Option<string>,
@@ -144,7 +145,7 @@ function toJson(value: JSONValue | unknown, log: { [any]: true? }?): string
 			return "[" .. table.concat(out, ",") .. "]"
 		else
 			for k, v in pairs(value :: any) do
-				if typeof(v) == "table" and v["unwrap"] and (v["_state"] == "S" or v["_state"] == "N") then
+				if Option.isOption(v) then
 					local vOpt: Option<unknown> = v
 					if vOpt:isSome() then
 						table.insert(out, toJson(tostring(k), log) .. ": " .. toJson(vOpt:unwrap(), log))
