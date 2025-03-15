@@ -26,11 +26,11 @@ type ErrorImpl<T, D> = {
 }
 
 type ErrorStruct<T, D> = {
-	_Type: T,
-	_Title: Option<string>,
-	_Description: Option<string>,
-	_Body: Option<D>,
-	_Trace: Option<{ TraceInfo }>,
+	Type: T,
+	Title: Option<string>,
+	Description: Option<string>,
+	Body: Option<D>,
+	Trace: Option<{ TraceInfo }>,
 }
 export type Error<T, D> = typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorImpl<T, D>))
 
@@ -93,11 +93,11 @@ function newErrorStruct<T, D>(
 	trace: Option<{ TraceInfo }>
 ): ErrorStruct<T, D>
 	return {
-		_Title = title,
-		_Type = errorType,
-		_Description = desc,
-		_Body = body,
-		_Trace = trace,
+		Title = title,
+		Type = errorType,
+		Description = desc,
+		Body = body,
+		Trace = trace,
 	}
 end
 
@@ -168,7 +168,7 @@ function ErrorImpl:__tostring()
 end
 
 function ErrorImpl:is(t: unknown): boolean
-	return self._Type == t
+	return self.Type == t
 end
 
 function ErrorImpl:display(fmt: ErrorDisplayFormat): string
@@ -177,35 +177,35 @@ function ErrorImpl:display(fmt: ErrorDisplayFormat): string
 	end
 
 	if fmt == "Log" then
-		return self._Trace:match(function(traceList)
+		return self.Trace:match(function(traceList)
 			if traceList[1] then
 				local trace = traceList[1]
-				return `{trace.Source}({trace.LineNumber}): {self._Type}`
+				return `{trace.Source}({trace.LineNumber}): {self.Type}`
 			end
-			return `{self._Type}`
+			return `{self.Type}`
 		end, function()
-			return `{self._Type}`
+			return `{self.Type}`
 		end)
 	end
 
-	local header: string = self._Title:match(function(title)
-		return self._Description:match(function(desc)
-			return `[{self._Type}]: {title}\n\t{desc}`
+	local header: string = self.Title:match(function(title)
+		return self.Description:match(function(desc)
+			return `[{self.Type}]: {title}\n\t{desc}`
 		end, function()
-			return `[{self._Type}]: {title}`
+			return `[{self.Type}]: {title}`
 		end)
 	end, function()
-		return self._Description:match(function(desc)
-			return `[{self._Type}]\n\t{desc}`
+		return self.Description:match(function(desc)
+			return `[{self.Type}]\n\t{desc}`
 		end, function()
-			return `[{self._Type}]`
+			return `[{self.Type}]`
 		end)
 	end)
 
 	local bodyStr: Option<string> = Option.none()
 
 	if fmt == "Body" or fmt == "Full" then
-		bodyStr = self._Body:match(function(body)
+		bodyStr = self.Body:match(function(body)
 			return Option.some(toJson(body))
 		end, function()
 			return Option.none()
@@ -214,7 +214,7 @@ function ErrorImpl:display(fmt: ErrorDisplayFormat): string
 
 	local traceStr: Option<string> = Option.none()
 	if fmt == "Trace" or fmt == "Full" then
-		traceStr = self._Trace:match(function(traceList)
+		traceStr = self.Trace:match(function(traceList)
 			local array = {}
 			for _, trace in ipairs(traceList) do
 				table.insert(
@@ -274,15 +274,15 @@ function newErrorBuilder<T, D>(
 end
 
 function ErrorBuilder:title(title: string)
-	return newErrorBuilder(self._Type, Option.some(title), self._Description, self._Body, self._Trace)
+	return newErrorBuilder(self.Type, Option.some(title), self.Description, self.Body, self.Trace)
 end
 
 function ErrorBuilder:description(desc: string)
-	return newErrorBuilder(self._Type, self._Title, Option.some(desc), self._Body, self._Trace)
+	return newErrorBuilder(self.Type, self.Title, Option.some(desc), self.Body, self.Trace)
 end
 
 function ErrorBuilder:body(body: unknown)
-	return newErrorBuilder(self._Type, self._Title, self._Description, Option.some(body), self._Trace)
+	return newErrorBuilder(self.Type, self.Title, self.Description, Option.some(body), self.Trace)
 end
 
 function ErrorBuilder:trace(trace: { TraceInfo })
@@ -290,11 +290,11 @@ function ErrorBuilder:trace(trace: { TraceInfo })
 		trace = table.clone(trace)
 		table.freeze(trace)
 	end
-	return newErrorBuilder(self._Type, self._Title, self._Description, self._Body, Option.some(trace))
+	return newErrorBuilder(self.Type, self.Title, self.Description, self.Body, Option.some(trace))
 end
 
 function ErrorBuilder:build()
-	return newError(self._Type, self._Title, self._Description, self._Body, self._Trace)
+	return newError(self.Type, self.Title, self.Description, self.Body, self.Trace)
 end
 
 return {
