@@ -198,7 +198,7 @@ function toJson(
 				table.insert(
 					out,
 					toJson(tostring(k), indent, initialIndent + indent, log)
-						.. ":"
+						.. ": "
 						.. toJson(v, indent, initialIndent + indent, log)
 				)
 			end
