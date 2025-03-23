@@ -161,6 +161,9 @@ function toJson(
 				table.insert(out, toJson(v, indent, initialIndent + indent, log))
 			end
 			if indent ~= 0 then
+				if #out == 0 then
+					return "[]"
+				end
 				local msg = "["
 				for i, row in ipairs(out) do
 					msg ..= "\n" .. string.rep(" ", initialIndent + indent) .. row
@@ -200,6 +203,9 @@ function toJson(
 				)
 			end
 			if indent ~= 0 then
+				if #out == 0 then
+					return "{}"
+				end
 				local msg = "{"
 				for i, row in ipairs(out) do
 					msg ..= "\n" .. string.rep(" ", initialIndent + indent) .. row
