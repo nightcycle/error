@@ -17,7 +17,7 @@ export type TraceInfo = {
 	},
 }
 
-export type ErrorDisplayFormat = "Full" | "Log" | "Header" | "Trace" | "Body" | "JSON"
+export type ErrorDisplayFormat = "Full" | "Log" | "Header" | "Trace" | "Body" | "JSON" | "PrettyJSON"
 type ErrorImpl<T, D> = {
 	__index: ErrorImpl<T, D>,
 	__tostring: (self: Error<T, D>) -> string,
@@ -105,9 +105,18 @@ end
 local ErrorImpl = {} :: ErrorImpl<unknown, unknown>
 ErrorImpl.__index = ErrorImpl
 
-function toJson(value: JSONValue | unknown, log: { [any]: true? }?): string
+function toJson(
+	value: JSONValue | unknown,
+	indent: number?,
+	initialIndent: number?,
+	log: { [any]: true? }?
+): string
 	log = log or {}
 	assert(log, `bad log`)
+	initialIndent = initialIndent or 0
+	assert(initialIndent, `bad initialIndent`)
+	indent = indent or 0
+	assert(indent, `bad indent`)
 	if type(value) == "string" then
 		return '"' .. value:gsub('"', '\\"') .. '"'
 	elseif type(value) == "number" then
@@ -124,9 +133,18 @@ function toJson(value: JSONValue | unknown, log: { [any]: true? }?): string
 			return '"<circular>"'
 		end
 		log[value] = true
-		local meta = getmetatable(value :: any)
+		local meta: { [any]: any? }? = nil
+		pcall(function()
+			meta = getmetatable(value :: any)
+		end)
 		if meta and meta.__tostring and meta ~= ErrorImpl then
-			return `"{tostring(value)}"`
+			local str: string?
+			local tostringSuccess, _ = pcall(function()
+				str = tostring(value)
+			end)
+			if tostringSuccess then
+				return `"{str}"`
+			end
 		end
 		local out = {}
 		local isArray = true
@@ -140,23 +158,60 @@ function toJson(value: JSONValue | unknown, log: { [any]: true? }?): string
 		end
 		if #(value :: any) == keyCount and isArray then
 			for _, v in ipairs(value :: any) do
-				table.insert(out, toJson(v, log))
+				table.insert(out, toJson(v, indent, initialIndent + indent, log))
 			end
-			return "[" .. table.concat(out, ",") .. "]"
+			if indent ~= 0 then
+				local msg = "["
+				for i, row in ipairs(out) do
+					msg ..= "\n" .. string.rep(" ", initialIndent + indent) .. row
+					if i ~= #out then
+						msg ..= ","
+					end
+				end
+				msg ..= "\n" .. string.rep(" ", initialIndent) .. "]"
+				return msg
+			else
+				return "[" .. table.concat(out, ",") .. "]"
+			end
 		else
 			for k, v in pairs(value :: any) do
 				if Option.isOption(v) then
 					local vOpt: Option<unknown> = v
 					if vOpt:isSome() then
-						table.insert(out, toJson(tostring(k), log) .. ": " .. toJson(vOpt:unwrap(), log))
+						table.insert(
+							out,
+							toJson(tostring(k), indent, initialIndent + indent, log)
+								.. ": "
+								.. toJson(vOpt:unwrap(), indent, initialIndent + indent, log)
+						)
 					else
-						table.insert(out, toJson(tostring(k), log) .. ": null")
+						table.insert(
+							out,
+							toJson(tostring(k), indent, initialIndent + indent, log) .. ": null"
+						)
 					end
 					continue
 				end
-				table.insert(out, toJson(tostring(k), log) .. ":" .. toJson(v, log))
+				table.insert(
+					out,
+					toJson(tostring(k), indent, initialIndent + indent, log)
+						.. ":"
+						.. toJson(v, indent, initialIndent + indent, log)
+				)
 			end
-			return "{" .. table.concat(out, ",") .. "}"
+			if indent ~= 0 then
+				local msg = "{"
+				for i, row in ipairs(out) do
+					msg ..= "\n" .. string.rep(" ", initialIndent + indent) .. row
+					if i ~= #out then
+						msg ..= ","
+					end
+				end
+				msg ..= "\n" .. string.rep(" ", initialIndent) .. "}"
+				return msg
+			else
+				return "{" .. table.concat(out, ",") .. "}"
+			end
 		end
 	else
 		return `"{tostring(value)}"`
@@ -174,6 +229,9 @@ end
 function ErrorImpl:display(fmt: ErrorDisplayFormat): string
 	if fmt == "JSON" then
 		return toJson(self)
+	end
+	if fmt == "PrettyJSON" then
+		return toJson(self, 4)
 	end
 
 	if fmt == "Log" then
@@ -316,5 +374,5 @@ return {
 	trace = function(offset: number?, maxTrace: number): { TraceInfo }
 		return dumpTrace(3 + (offset or 0), maxTrace or DEFAULT_MAX_TRACE)
 	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }) & ((offset: number, maxTrace: number) -> { TraceInfo }),
-	displayAsJson = toJson,
+	displayAsJson = toJson :: (unknown) -> string & (unknown, number) -> string,
 }
