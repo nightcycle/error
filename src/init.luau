@@ -380,5 +380,5 @@ return {
 	trace = function(offset: number?, maxTrace: number): { TraceInfo }
 		return dumpTrace(3 + (offset or 0), maxTrace or DEFAULT_MAX_TRACE)
 	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }) & ((offset: number, maxTrace: number) -> { TraceInfo }),
-	displayAsJson = toJson :: (unknown) -> string & (unknown, number) -> string,
+	displayAsJson = toJson :: ((unknown) -> string) & ((unknown, number) -> string),
 }
