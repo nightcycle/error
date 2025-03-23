@@ -137,7 +137,7 @@ function toJson(
 		pcall(function()
 			meta = getmetatable(value :: any)
 		end)
-		if meta and meta.__tostring and meta ~= ErrorImpl then
+		if meta and rawget(meta, "__tostring") ~= nil and meta ~= ErrorImpl then
 			local str: string?
 			local tostringSuccess, _ = pcall(function()
 				str = tostring(value)
