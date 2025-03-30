@@ -283,7 +283,9 @@ function ErrorImpl:display(fmt: ErrorDisplayFormat): string
 			for _, trace in ipairs(traceList) do
 				table.insert(
 					array,
-					`\t{trace.Source}{if trace.Function.Name:len() > 0 then "/" .. trace.Function.Name else ""}({trace.LineNumber})`
+					`\t{trace.Source}{if trace.Function.Name:len() > 0
+						then "/" .. tostring(trace.Function.Name)
+						else ""}({trace.LineNumber})`
 				)
 			end
 			return Option.some(table.concat(array, "\n"))
