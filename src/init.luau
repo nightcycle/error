@@ -20,9 +20,9 @@ export type TraceInfo = {
 export type ErrorDisplayFormat = "Full" | "Log" | "Header" | "Trace" | "Body" | "JSON" | "PrettyJSON"
 type ErrorImpl<T, D> = {
 	__index: ErrorImpl<T, D>,
-	__tostring: (self: Error<T, D>) -> string,
-	is: (self: Error<T, D>, t: T) -> boolean,
-	display: (self: Error<T, D>, fmt: ErrorDisplayFormat) -> string,
+	__tostring: (self: any) -> string,
+	is: (self: any, t: T) -> boolean,
+	display: (self: any, fmt: ErrorDisplayFormat) -> string,
 }
 
 type ErrorStruct<T, D> = {
