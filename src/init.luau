@@ -1,7 +1,7 @@
 --!strict
 -- Services
 -- Packages
-local Option = require("@wally/Option")
+local Option = require("@pkg/@nightcycle/option")
 -- Modules
 -- Types
 type Option<V> = Option.Option<V>

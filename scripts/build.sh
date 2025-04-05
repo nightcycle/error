@@ -8,7 +8,7 @@ LSP_SETTINGS=".luau-analyze.json"
 # get if any of the arguments were "--serve"
 is_serve=false
 build_dir="build"
-is_wally=true
+is_wally=false
 
 # if [ ! -d node_modules ]; then
 #     sh scripts/npm-install.sh
@@ -21,10 +21,10 @@ do
 		build_dir="serve"
 	fi
 
-	# if [ "$arg" = "--wally" ]; then
-	# 	echo "wally project detected"
-	# 	is_wally=true
-	# fi
+	if [ "$arg" = "--wally" ]; then
+		echo "wally project detected"
+		is_wally=true
+	fi
 done
 
 # create build directory
@@ -67,13 +67,15 @@ stylua "$build_dir/src"
 if [ "$is_serve" = true ]; then
 	echo "running serve darklua"
 	rojo sourcemap --watch "$ROJO_CONFIG" -o "$SOURCEMAP" &
-	darklua process "src" "$build_dir/src" --config "$DARKLUA_CONFIG" -w & 
-	# darklua process "node_modules" "$build_dir/node_modules" --config "$DARKLUA_CONFIG" -w & 
+	if [ "$is_wally" = true ]; then
+		darklua process "src" "$build_dir/src" --config "$DARKLUA_CONFIG" -w &
+	fi
 else
 	echo "running build darklua"
 	rojo sourcemap "$build_dir/$ROJO_CONFIG" -o "$build_dir/$SOURCEMAP"
-	darklua process "src" "$build_dir/src" --config "$DARKLUA_CONFIG" --verbose
-	# darklua process "node_modules" "$build_dir/node_modules" --config "$DARKLUA_CONFIG" --verbose
+	if [ "$is_wally" = true ]; then
+		darklua process "src" "$build_dir/src" --config "$DARKLUA_CONFIG" --verbose
+	fi
 fi
 
 # final compile
