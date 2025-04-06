@@ -64,7 +64,14 @@ fi
 
 cp -r "stage-src" "$build_dir/src"
 cp -r "stage-src" "$build_dir/stage-src"
+if [ ! -d "Packages" ]; then
+  mkdir "Packages"
+fi
 cp -rL "Packages" "$build_dir/Packages"
+if [ ! -d "node_modules" ]; then
+  mkdir "node_modules"
+fi
+cp -rL "node_modules" "$build_dir/node_modules"
 cp -rL "scripts" "$build_dir/scripts"
 
 cp -r "types" "$build_dir/types"
