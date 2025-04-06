@@ -51,9 +51,16 @@ if [ "$is_wally" = true ]; then
 	cp -r "aftman.toml" "$build_dir/aftman.toml"
 fi
 
+# if stage-src exists, remove it
+if [ -d "stage-src" ]; then
+	rm -rf "stage-src"
+fi
+
 cp -r "src" "stage-src"
 
-to_wally_path "stage-src"
+if [ "$is_wally" = true ]; then
+	to_wally_path "stage-src"
+fi
 
 cp -r "stage-src" "$build_dir/src"
 cp -r "stage-src" "$build_dir/stage-src"
