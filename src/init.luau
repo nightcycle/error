@@ -32,17 +32,17 @@ type ErrorStruct<T, D> = {
 	Body: Option<D>,
 	Trace: Option<{ TraceInfo }>,
 }
-export type Error<T, D> = typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorImpl<T, D>))
+export type Error<T, D> = ErrorImpl<T, D> --typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorImpl<T, D>))
 
 type ErrorBuilderImpl<T, D> = {
 	__index: ErrorBuilderImpl<T, D>,
-	title: (self: ErrorBuilder<T, D>, title: string) -> ErrorBuilder<T, D>,
-	description: (self: ErrorBuilder<T, D>, desc: string) -> ErrorBuilder<T, D>,
-	body: (self: ErrorBuilder<T, D>, body: D) -> ErrorBuilder<T, D>,
-	trace: (self: ErrorBuilder<T, D>, trace: { TraceInfo }) -> ErrorBuilder<T, D>,
-	build: (self: ErrorBuilder<T, D>) -> Error<T, D>,
+	title: (self: any, title: string) -> ErrorBuilder<T, D>,
+	description: (self: any, desc: string) -> ErrorBuilder<T, D>,
+	body: (self: any, body: D) -> ErrorBuilder<T, D>,
+	trace: (self: any, trace: { TraceInfo }) -> ErrorBuilder<T, D>,
+	build: (self: any) -> Error<T, D>,
 }
-export type ErrorBuilder<T, D> = typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorBuilderImpl<T, D>))
+export type ErrorBuilder<T, D> = ErrorBuilderImpl<T, D> --typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorBuilderImpl<T, D>))
 
 -- Constants
 local INFO_OPTIONS = "slnaf"
