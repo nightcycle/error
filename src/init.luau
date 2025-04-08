@@ -32,7 +32,7 @@ type ErrorStruct<T, D> = {
 	Body: Option<D>,
 	Trace: Option<{ TraceInfo }>,
 }
-export type Error<T, D> = ErrorImpl<T, D> --typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorImpl<T, D>))
+export type Error<T, D> = ErrorStruct<T, D> & ErrorImpl<T, D> --typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorImpl<T, D>))
 
 type ErrorBuilderImpl<T, D> = {
 	__index: ErrorBuilderImpl<T, D>,
