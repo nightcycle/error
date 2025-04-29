@@ -108,6 +108,7 @@ ErrorImpl.__index = ErrorImpl
 function toJson(
 	value: JSONValue | unknown,
 	indent: number?,
+	sortKeys: boolean?,
 	initialIndent: number?,
 	log: { [any]: true? }?
 ): string
@@ -158,7 +159,7 @@ function toJson(
 		end
 		if #(value :: any) == keyCount and isArray then
 			for _, v in ipairs(value :: any) do
-				table.insert(out, toJson(v, indent, initialIndent + indent, log))
+				table.insert(out, toJson(v, indent, sortKeys, initialIndent + indent, log))
 			end
 			if indent ~= 0 then
 				if #out == 0 then
@@ -177,29 +178,37 @@ function toJson(
 				return "[" .. table.concat(out, ",") .. "]"
 			end
 		else
-			for k, v in pairs(value :: any) do
+			local keyList = {}
+			for k, _ in pairs(value :: any) do
+				table.insert(keyList, k)
+			end
+			if sortKeys then
+				table.sort(keyList)
+			end
+			for i, k in ipairs(keyList) do
+				local v = (value :: any)[k]
 				if Option.isOption(v) then
 					local vOpt: Option<unknown> = v
 					if vOpt:isSome() then
 						table.insert(
 							out,
-							toJson(tostring(k), indent, initialIndent + indent, log)
+							toJson(tostring(k), indent, sortKeys, initialIndent + indent, log)
 								.. ": "
-								.. toJson(vOpt:unwrap(), indent, initialIndent + indent, log)
+								.. toJson(vOpt:unwrap(), indent, sortKeys, initialIndent + indent, log)
 						)
 					else
 						table.insert(
 							out,
-							toJson(tostring(k), indent, initialIndent + indent, log) .. ": null"
+							toJson(tostring(k), indent, sortKeys, initialIndent + indent, log) .. ": null"
 						)
 					end
 					continue
 				end
 				table.insert(
 					out,
-					toJson(tostring(k), indent, initialIndent + indent, log)
+					toJson(tostring(k), indent, sortKeys, initialIndent + indent, log)
 						.. ": "
-						.. toJson(v, indent, initialIndent + indent, log)
+						.. toJson(v, indent, sortKeys, initialIndent + indent, log)
 				)
 			end
 			if indent ~= 0 then
@@ -382,5 +391,5 @@ return {
 	trace = function(offset: number?, maxTrace: number): { TraceInfo }
 		return dumpTrace(3 + (offset or 0), maxTrace or DEFAULT_MAX_TRACE)
 	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }) & ((offset: number, maxTrace: number) -> { TraceInfo }),
-	displayAsJson = toJson :: ((unknown) -> string) & ((unknown, number) -> string),
+	displayAsJson = toJson :: ((unknown) -> string) & ((unknown, number) -> string) & ((unknown, number, boolean) -> string),
 }
