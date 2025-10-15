@@ -5,391 +5,248 @@ local Option = require("@pkg/@nightcycle/option")
 -- Modules
 -- Types
 type Option<V> = Option.Option<V>
-export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue }
-export type TraceInfo = {
-	Source: string,
-	LineNumber: number,
-	Function: {
-		Name: string,
-		ParameterCount: number,
-		IsVariadic: number,
-		Reference: (...unknown) -> ...unknown,
-	},
+export type DisplayConfig = {
+	sortKeys: boolean,
+	indentWith: string,
+}
+type OverrideCallback = (
+	value: unknown?,
+	baseIndent: number,
+	display: Display,
+	log: { [any]: true? }
+) -> string?
+type Callback = (value: unknown?, baseIndent: number, display: Display, log: { [any]: true? }) -> string
+type DisplayStruct = DisplayConfig & {
+	override: OverrideCallback,
+	callback: Callback,
 }
 
-export type ErrorDisplayFormat = "Full" | "Log" | "Header" | "Trace" | "Body" | "JSON" | "PrettyJSON"
-type ErrorImpl<T, D> = {
-	__index: ErrorImpl<T, D>,
-	__tostring: (self: any) -> string,
-	is: (self: any, t: T) -> boolean,
-	display: (self: any, fmt: ErrorDisplayFormat) -> string,
+type DisplayImpl = {
+	display: (self: Display, value: unknown?, baseIndent: number?, log: { [any]: true? }?) -> string,
+	builder: (self: Display) -> DisplayBuilder,
 }
+export type Display = DisplayStruct & DisplayImpl
 
-type ErrorStruct<T, D> = {
-	Type: T,
-	Title: Option<string>,
-	Description: Option<string>,
-	Body: Option<D>,
-	Trace: Option<{ TraceInfo }>,
+type DisplayBuilderImpl = {
+	sortKeys: (self: DisplayBuilder, sortKeys: boolean) -> DisplayBuilder,
+	indentWith: (self: DisplayBuilder, character: string) -> DisplayBuilder,
+	callback: (self: DisplayBuilder, callback: Callback) -> DisplayBuilder,
+	override: (self: DisplayBuilder, callback: OverrideCallback) -> DisplayBuilder,
+	build: (self: DisplayBuilder) -> Display,
+	display: (self: DisplayBuilder, value: unknown?, baseIndent: number?, log: { [any]: true? }?) -> string,
 }
-export type Error<T, D> = ErrorStruct<T, D> & ErrorImpl<T, D> --typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorImpl<T, D>))
-
-type ErrorBuilderImpl<T, D> = {
-	__index: ErrorBuilderImpl<T, D>,
-	title: (self: any, title: string) -> ErrorBuilder<T, D>,
-	description: (self: any, desc: string) -> ErrorBuilder<T, D>,
-	body: (self: any, body: D) -> ErrorBuilder<T, D>,
-	trace: (self: any, trace: { TraceInfo }) -> ErrorBuilder<T, D>,
-	build: (self: any) -> Error<T, D>,
-}
-export type ErrorBuilder<T, D> = ErrorBuilderImpl<T, D> --typeof(setmetatable({} :: ErrorStruct<T, D>, {} :: ErrorBuilderImpl<T, D>))
-
+export type DisplayBuilder = DisplayStruct & DisplayBuilderImpl
 -- Constants
-local INFO_OPTIONS = "slnaf"
-local DEFAULT_MAX_TRACE = 16
 -- Variables
 -- References
 -- Private Functions
-
-function getTraceInfo(level: number): Option<TraceInfo>
-	local source, number, fnName, paramCount, isVariadic, ref = debug.info(level, INFO_OPTIONS)
-	if source == nil then
-		return Option.none()
-	end
-	local out = {
-		Source = source,
-		LineNumber = number,
-		Function = {
-			Name = fnName,
-			ParameterCount = paramCount,
-			IsVariadic = isVariadic,
-			Reference = ref,
-		},
-	}
-	table.freeze(out.Function)
+function constructFrom(struct: DisplayStruct, set: (mutStruct: DisplayStruct) -> ()): DisplayStruct
+	local out = table.clone(struct) :: Display
+	set(out)
 	table.freeze(out)
-	return Option.some(out)
-end
-function dumpTrace(offset: number, maxTrace: number): { TraceInfo }
-	local index = 1 + offset
-	local out = {}
-	local trace = getTraceInfo(index)
-	while trace:isSome() do
-		out[index - offset] = trace:unwrap()
-		index += 1
-		if index > maxTrace then
-			break
-		end
-		trace = getTraceInfo(index)
-	end
 	return out
 end
-
-function newErrorStruct<T, D>(
-	errorType: T,
-	title: Option<string>,
-	desc: Option<string>,
-	body: Option<D>,
-	trace: Option<{ TraceInfo }>
-): ErrorStruct<T, D>
-	return {
-		Title = title,
-		Type = errorType,
-		Description = desc,
-		Body = body,
-		Trace = trace,
-	}
-end
-
 -- Class
-local ErrorImpl = {} :: ErrorImpl<unknown, unknown>
-ErrorImpl.__index = ErrorImpl
+local Display = {} :: DisplayImpl
+Display["__index"] = Display
 
-function toJson(
-	value: JSONValue | unknown,
-	indent: number?,
-	sortKeys: boolean?,
-	initialIndent: number?,
-	log: { [any]: true? }?
-): string
-	log = log or {}
-	assert(log, `bad log`)
-	initialIndent = initialIndent or 0
-	assert(initialIndent, `bad initialIndent`)
-	indent = indent or 0
-	assert(indent, `bad indent`)
-	if type(value) == "string" then
-		return '"' .. value:gsub('"', '\\"') .. '"'
-	elseif type(value) == "number" then
-		if value ~= value then
-			return '"NaN"'
-		elseif math.abs(value) == math.huge then
-			return '"Inf"'
-		end
-		return tostring(value)
-	elseif type(value) == "boolean" then
-		return tostring(value)
-	elseif type(value) == "table" then
-		if log[value] then
-			return '"<circular>"'
-		end
-		log[value] = true
-		local meta: { [any]: any? }? = nil
-		pcall(function()
-			meta = getmetatable(value :: any)
-		end)
-		if meta and rawget(meta, "__tostring") ~= nil and meta ~= ErrorImpl then
-			local str: string?
-			local tostringSuccess, _ = pcall(function()
-				str = tostring(value)
-			end)
-			if tostringSuccess then
-				return `"{str}"`
-			end
-		end
-		local out = {}
-		local isArray = true
-		local keyCount = 0
-		for k, v in pairs(value :: any) do
-			keyCount += 1
-			if type(k) ~= "number" then
-				isArray = false
-				break
-			end
-		end
-		if #(value :: any) == keyCount and isArray then
-			for _, v in ipairs(value :: any) do
-				table.insert(out, toJson(v, indent, sortKeys, initialIndent + indent, log))
-			end
-			if indent ~= 0 then
-				if #out == 0 then
-					return "[]"
+local DisplayBuilder = {} :: DisplayBuilderImpl
+DisplayBuilder["__index"] = DisplayBuilder
+
+function newDisplayBuilder(struct: DisplayStruct): DisplayBuilder
+	local self = table.clone(struct) :: DisplayBuilder
+	setmetatable(self, DisplayBuilder)
+	table.freeze(self)
+	return self
+end
+function newDisplay(struct: DisplayStruct): Display
+	local self = table.clone(struct) :: Display
+	setmetatable(self, Display)
+	table.freeze(self)
+	return self
+end
+
+function Display:display(value: unknown?, baseIndent: number?, logs: { [any]: true? }?): string
+	local override = self.override(value, baseIndent or 0, self, logs or {})
+	if override ~= nil then
+		return override
+	end
+	return self.callback(value, baseIndent or 0, self, logs or {})
+end
+
+function Display:builder(): DisplayBuilder
+	return newDisplayBuilder(self :: DisplayStruct)
+end
+
+function DisplayBuilder:build(): Display
+	return newDisplay(self :: DisplayStruct)
+end
+
+function DisplayBuilder:sortKeys(sortKeys: boolean): DisplayBuilder
+	return constructFrom(self, function(mutStruct)
+		mutStruct.sortKeys = sortKeys
+	end) :: DisplayBuilder
+end
+
+function DisplayBuilder:indentWith(text: string): DisplayBuilder
+	return constructFrom(self, function(mutStruct)
+		mutStruct.indentWith = text
+	end) :: DisplayBuilder
+end
+
+function DisplayBuilder:callback(callback: Callback): DisplayBuilder
+	return constructFrom(self, function(mutStruct)
+		mutStruct.callback = callback
+	end) :: DisplayBuilder
+end
+
+function DisplayBuilder:override(callback: OverrideCallback): DisplayBuilder
+	return constructFrom(self, function(mutStruct)
+		mutStruct.override = callback
+	end) :: DisplayBuilder
+end
+
+function DisplayBuilder:display(value, baseIndent, logs): string
+	return self:build():display(value, baseIndent, logs)
+end
+
+function newJsonDisplayBuilder(): DisplayBuilder
+	return newDisplayBuilder({
+		sortKeys = false,
+		indentWith = "",
+		override = function(
+			value: unknown?,
+			baseIndent: number,
+			display: Display,
+			log: { [any]: true? }
+		): string?
+			return nil
+		end,
+		callback = function(
+			value: unknown?,
+			baseIndent: number,
+			display: Display,
+			log: { [any]: true? }
+		): string
+			if type(value) == "string" then
+				return '"' .. value:gsub('"', '\\"') .. '"'
+			elseif type(value) == "number" then
+				if value ~= value then
+					return '"NaN"'
+				elseif math.abs(value) == math.huge then
+					return '"Inf"'
 				end
-				local msg = "["
-				for i, row in ipairs(out) do
-					msg ..= "\n" .. string.rep(" ", initialIndent + indent) .. row
-					if i ~= #out then
-						msg ..= ","
+				return tostring(value)
+			elseif type(value) == "boolean" then
+				return tostring(value)
+			elseif type(value) == "table" then
+				if log[value] then
+					return '"<circular>"'
+				end
+				log[value] = true
+				local meta: { [any]: any? }? = nil
+				pcall(function()
+					meta = getmetatable(value :: any)
+				end)
+				if meta and rawget(meta, "__tostring") ~= nil then
+					local str: string?
+					local tostringSuccess, _ = pcall(function()
+						str = tostring(value)
+					end)
+					if tostringSuccess then
+						return `"{str}"`
 					end
 				end
-				msg ..= "\n" .. string.rep(" ", initialIndent) .. "]"
-				return msg
-			else
-				return "[" .. table.concat(out, ",") .. "]"
-			end
-		else
-			local keyList = {}
-			for k, _ in pairs(value :: any) do
-				table.insert(keyList, k)
-			end
-			if sortKeys then
-				table.sort(keyList)
-			end
-			for i, k in ipairs(keyList) do
-				local v = (value :: any)[k]
-				if Option.isOption(v) then
-					local vOpt: Option<unknown> = v
-					if vOpt:isSome() then
-						table.insert(
-							out,
-							toJson(tostring(k), indent, sortKeys, initialIndent + indent, log)
-								.. ": "
-								.. toJson(vOpt:unwrap(), indent, sortKeys, initialIndent + indent, log)
-						)
+				local out = {}
+				local isArray = true
+				local keyCount = 0
+				for k, v in pairs(value :: any) do
+					keyCount += 1
+					if type(k) ~= "number" then
+						isArray = false
+						break
+					end
+				end
+				if #(value :: any) == keyCount and isArray then
+					for _, v in ipairs(value :: any) do
+						table.insert(out, display:display(v, baseIndent + 1, log))
+					end
+					if display.indentWith:len() ~= 0 then
+						if #out == 0 then
+							return "[]"
+						end
+						local msg = "["
+						for i, row in ipairs(out) do
+							msg ..= "\n" .. string.rep(display.indentWith, baseIndent + 1) .. row
+							if i ~= #out then
+								msg ..= ","
+							end
+						end
+						msg ..= "\n" .. string.rep(display.indentWith, baseIndent) .. "]"
+						return msg
 					else
+						return "[" .. table.concat(out, ",") .. "]"
+					end
+				else
+					local keyList = {}
+					for k, _ in pairs(value :: any) do
+						table.insert(keyList, k)
+					end
+					if display.sortKeys then
+						table.sort(keyList)
+					end
+					for i, k in ipairs(keyList) do
+						local v = (value :: any)[k]
+						if Option.isOption(v) then
+							local vOpt: Option<unknown> = v
+							if vOpt:isSome() then
+								table.insert(
+									out,
+									display:display(tostring(k), baseIndent + 1, log)
+										.. ": "
+										.. display:display(v, baseIndent + 1, log)
+								)
+							else
+								table.insert(
+									out,
+									display:display(tostring(k), baseIndent + 1, log) .. ": null"
+								)
+							end
+							continue
+						end
 						table.insert(
 							out,
-							toJson(tostring(k), indent, sortKeys, initialIndent + indent, log) .. ": null"
+							display:display(tostring(k), baseIndent + 1, log)
+								.. ": "
+								.. display:display(v, baseIndent + 1, log)
 						)
 					end
-					continue
-				end
-				table.insert(
-					out,
-					toJson(tostring(k), indent, sortKeys, initialIndent + indent, log)
-						.. ": "
-						.. toJson(v, indent, sortKeys, initialIndent + indent, log)
-				)
-			end
-			if indent ~= 0 then
-				if #out == 0 then
-					return "{}"
-				end
-				local msg = "{"
-				for i, row in ipairs(out) do
-					msg ..= "\n" .. string.rep(" ", initialIndent + indent) .. row
-					if i ~= #out then
-						msg ..= ","
+					if display.indentWith:len() ~= 0 then
+						if #out == 0 then
+							return "{}"
+						end
+						local msg = "{"
+						for i, row in ipairs(out) do
+							msg ..= "\n" .. string.rep(display.indentWith, baseIndent + 1) .. row
+							if i ~= #out then
+								msg ..= ","
+							end
+						end
+						msg ..= "\n" .. string.rep(display.indentWith, baseIndent + 1) .. "}"
+						return msg
+					else
+						return "{" .. table.concat(out, ",") .. "}"
 					end
 				end
-				msg ..= "\n" .. string.rep(" ", initialIndent) .. "}"
-				return msg
 			else
-				return "{" .. table.concat(out, ",") .. "}"
+				return `"{tostring(value)}"`
 			end
-		end
-	else
-		return `"{tostring(value)}"`
-	end
-end
-
-function ErrorImpl:__tostring()
-	return self:display("Full")
-end
-
-function ErrorImpl:is(t: unknown): boolean
-	return self.Type == t
-end
-
-function ErrorImpl:display(fmt: ErrorDisplayFormat): string
-	if fmt == "JSON" then
-		return toJson(self)
-	end
-	if fmt == "PrettyJSON" then
-		return toJson(self, 4)
-	end
-
-	if fmt == "Log" then
-		return self.Trace:match(function(traceList)
-			if traceList[1] then
-				local trace = traceList[1]
-				return `{trace.Source}({trace.LineNumber}): {self.Type}`
-			end
-			return `{self.Type}`
-		end, function()
-			return `{self.Type}`
-		end)
-	end
-
-	local header: string = self.Title:match(function(title)
-		return self.Description:match(function(desc)
-			return `[{self.Type}]: {title}\n\t{desc}`
-		end, function()
-			return `[{self.Type}]: {title}`
-		end)
-	end, function()
-		return self.Description:match(function(desc)
-			return `[{self.Type}]\n\t{desc}`
-		end, function()
-			return `[{self.Type}]`
-		end)
-	end)
-
-	local bodyStr: Option<string> = Option.none()
-
-	if fmt == "Body" or fmt == "Full" then
-		bodyStr = self.Body:match(function(body)
-			return Option.some(toJson(body))
-		end, function()
-			return Option.none()
-		end)
-	end
-
-	local traceStr: Option<string> = Option.none()
-	if fmt == "Trace" or fmt == "Full" then
-		traceStr = self.Trace:match(function(traceList)
-			local array = {}
-			for _, trace in ipairs(traceList) do
-				table.insert(
-					array,
-					`\t{trace.Source}{if trace.Function.Name:len() > 0
-						then "/" .. tostring(trace.Function.Name)
-						else ""}({trace.LineNumber})`
-				)
-			end
-			return Option.some(table.concat(array, "\n"))
-		end, function()
-			return Option.none()
-		end)
-	end
-
-	return bodyStr:match(function(body)
-		return traceStr:match(function(trace)
-			return `{header}\n\t{body}\n{trace}`
-		end, function()
-			return `{header}\n\t{body}`
-		end)
-	end, function()
-		return traceStr:match(function(trace)
-			return `{header}\n{trace}`
-		end, function()
-			return `{header}`
-		end)
-	end)
-end
-
-function newError<T, D>(
-	errorType: T,
-	title: Option<string>,
-	desc: Option<string>,
-	body: Option<D>,
-	trace: Option<{ TraceInfo }>
-): Error<T, D>
-	local out: Error<T, D> =
-		setmetatable(newErrorStruct(errorType, title, desc, body, trace), ErrorImpl) :: any
-	table.freeze(out)
-	return out
-end
-
--- Builder class
-local ErrorBuilder = {} :: ErrorBuilderImpl<unknown, unknown>
-ErrorBuilder.__index = ErrorBuilder
-
-function newErrorBuilder<T, D>(
-	errorType: T,
-	title: Option<string>,
-	desc: Option<string>,
-	body: Option<D>,
-	trace: Option<{ TraceInfo }>
-): ErrorBuilder<T, D>
-	local out: ErrorBuilder<T, D> =
-		setmetatable(newErrorStruct(errorType, title, desc, body, trace), ErrorBuilder) :: any
-	table.freeze(out)
-	return out
-end
-
-function ErrorBuilder:title(title: string)
-	return newErrorBuilder(self.Type, Option.some(title), self.Description, self.Body, self.Trace)
-end
-
-function ErrorBuilder:description(desc: string)
-	return newErrorBuilder(self.Type, self.Title, Option.some(desc), self.Body, self.Trace)
-end
-
-function ErrorBuilder:body(body: unknown)
-	return newErrorBuilder(self.Type, self.Title, self.Description, Option.some(body), self.Trace)
-end
-
-function ErrorBuilder:trace(trace: { TraceInfo })
-	if not table.isfrozen(trace) then
-		trace = table.clone(trace)
-		table.freeze(trace)
-	end
-	return newErrorBuilder(self.Type, self.Title, self.Description, self.Body, Option.some(trace))
-end
-
-function ErrorBuilder:build()
-	return newError(self.Type, self.Title, self.Description, self.Body, self.Trace)
+		end,
+	})
 end
 
 return {
-	new = function<T, D>(errorType: T): ErrorBuilder<T, D>
-		return newErrorBuilder(
-			errorType :: T,
-			Option.none(),
-			Option.none(),
-			Option.none(),
-			Option.some(dumpTrace(3, DEFAULT_MAX_TRACE))
-		)
-	end,
-	isErr = function(value: unknown?): boolean
-		if typeof(value) == "table" then
-			return getmetatable(value :: any) == ErrorImpl
-		end
-		return false
-	end,
-	trace = function(offset: number?, maxTrace: number): { TraceInfo }
-		return dumpTrace(3 + (offset or 0), maxTrace or DEFAULT_MAX_TRACE)
-	end :: ((number) -> { TraceInfo }) & (() -> { TraceInfo }) & ((offset: number, maxTrace: number) -> { TraceInfo }),
-	displayAsJson = toJson :: ((unknown) -> string) & ((unknown, number) -> string) & ((unknown, number, boolean) -> string),
+	JSON = {
+		new = newJsonDisplayBuilder,
+	},
 }
